@@ -1,33 +1,41 @@
-import { BrowserMultiFormatReader } from 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.0/esm5/index.min.js';
+import { BrowserMultiFormatReader, NotFoundException } from 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.0/esm5/index.min.js';
 
 const codeReader = new BrowserMultiFormatReader();
 const videoElement = document.getElementById('video');
 const resultElement = document.getElementById('result');
 
-// デバイスのカメラを一覧取得
-codeReader.listVideoInputDevices()
-    .then((videoInputDevices) => {
+async function startScan() {
+    try {
+        const videoInputDevices = await codeReader.listVideoInputDevices();
         if (videoInputDevices.length > 0) {
-            // カメラが見つかった場合、スキャンを開始
-            // 最初のカメラを使用
-            codeReader.decodeFromVideoDevice(videoInputDevices[0].deviceId, 'video', (result, err) => {
+            // 背面カメラを優先的に選択
+            const rearCamera = videoInputDevices.find(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('背面'));
+            const deviceId = rearCamera ? rearCamera.deviceId : videoInputDevices[0].deviceId;
+
+            resultElement.textContent = 'カメラを起動中...';
+            console.log(`Using device: ${deviceId}`);
+
+            codeReader.decodeFromVideoDevice(deviceId, 'video', (result, err) => {
                 if (result) {
-                    // バーコードが検出された場合
                     console.log(result);
                     resultElement.textContent = result.getText();
-                } else if (err && !(err instanceof ZXing.NotFoundException)) {
-                    // エラーが発生した場合 (NotFoundExceptionは無視)
-                    console.error(err);
-                    resultElement.textContent = 'エラーが発生しました: ' + err;
+                } else if (err && !(err instanceof NotFoundException)) {
+                    console.error('Decoding error:', err);
+                    resultElement.textContent = `スキャンエラー: ${err.name}`;
                 }
             });
-            console.log(`使用中のカメラ: ${videoInputDevices[0].label}`);
         } else {
-            console.error("カメラが見つかりません。");
-            resultElement.textContent = "カメラが見つかりません。";
+            console.error("利用可能なカメラが見つかりません。");
+            resultElement.textContent = "利用可能なカメラが見つかりません。";
         }
-    })
-    .catch((err) => {
-        console.error(err);
-        resultElement.textContent = 'カメラへのアクセスに失敗しました: ' + err;
-    });
+    } catch (err) {
+        console.error('Initialization error:', err);
+        if (err.name === 'NotAllowedError') {
+            resultElement.textContent = 'カメラへのアクセスが拒否されました。ブラウザの設定を確認してください。';
+        } else {
+            resultElement.textContent = `初期化エラー: ${err.name} - ${err.message}`;
+        }
+    }
+}
+
+startScan();
